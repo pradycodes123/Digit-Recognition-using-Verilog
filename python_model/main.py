@@ -48,7 +48,7 @@ class MnistDataloader(object):
         return (x_train, y_train),(x_test, y_test)        
 
 
-input_path = "mnist"   
+input_path = r"C:\Users\Pradyumna S\Projects\Digit recognition using verilog\data\mnist"
 
 training_images_filepath = join(input_path, "train-images.idx3-ubyte")
 training_labels_filepath = join(input_path, "train-labels.idx1-ubyte")
@@ -66,7 +66,7 @@ def show_images(images, title_texts):
         if title_text != '':
             plt.title(title_text, fontsize=15)
         index += 1
-
+        
 mnist_dataloader = MnistDataloader(training_images_filepath,
                                    training_labels_filepath,
                                    test_images_filepath,
@@ -134,50 +134,56 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        
-        self.fc1 = nn.Linear(196, 16)
+
+        self.fc1 = nn.Linear(196, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, 10)
+
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(16, 10)
 
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
-        return x
 
+        x = self.relu(self.fc1(x))
+        x = self.relu(self.fc2(x))
+        x = self.fc3(x)
+
+        return x
+    
+
+''' 
+did not add BatchNorm and Dropout cuz small network - less performance
+BatcNorm - normalizes data at each layer to make training more fast and stable  
+dropout - randomly shut off a percentage of random neurons to avoid overfitting
+'''
 model = Net()
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # to update weights to reduce losses
 
 
-epochs = 5
+epochs = 10
+
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5) 
+#step lr - reduces learning rate for every 5 epochs by gamma
 
 for epoch in range(epochs):
-
     running_loss = 0
-
     for images, labels in train_loader:
-
-        optimizer.zero_grad()
-
-        outputs = model(images)
-
-        loss = criterion(outputs, labels)
-
-        loss.backward()
-
-        optimizer.step()
-
+        optimizer.zero_grad()  # clears out calcs
+        outputs = model(images) #model making the guess
+        loss = criterion(outputs, labels) 
+        loss.backward() # backward prop
+        optimizer.step() # update weights
         running_loss += loss.item()
-
+    
+    scheduler.step()  # update lr once every 5 epochs
     print(f"Epoch {epoch+1}, Loss = {running_loss:.4f}")
 
 
 correct = 0
 total = 0
 
-with torch.no_grad():
+with torch.no_grad(): # dont calc gradients 
 
     for images, labels in test_loader:
 

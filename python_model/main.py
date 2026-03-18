@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
+import os
 
 
 class MnistDataloader(object):
@@ -103,18 +104,19 @@ images_2_show = []
 titles_2_show = []
 
 for i in range(0, 10):
-    r = random.randint(1, 60000)
+    r = random.randint(0, 59999)
     images_2_show.append(x_train[r].reshape(14, 14))
     titles_2_show.append('training image [' + str(r) + '] = ' + str(y_train[r]))
 
 for i in range(0, 5):
-    r = random.randint(1, 10000)
+    r = random.randint(0, 9999)
     images_2_show.append(x_test[r].reshape(14, 14))
     titles_2_show.append('test image [' + str(r) + '] = ' + str(y_test[r]))
 
 show_images(images_2_show, titles_2_show)
 print(x_train.shape)
 print(y_train.shape)
+
 
 
 x_train_t = torch.tensor(x_train, dtype=torch.float32)
@@ -156,28 +158,36 @@ BatcNorm - normalizes data at each layer to make training more fast and stable
 dropout - randomly shut off a percentage of random neurons to avoid overfitting
 '''
 model = Net()
-
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)  # to update weights to reduce losses
 
 
-epochs = 10
-
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5) 
 #step lr - reduces learning rate for every 5 epochs by gamma
 
-for epoch in range(epochs):
-    running_loss = 0
-    for images, labels in train_loader:
-        optimizer.zero_grad()  # clears out calcs
-        outputs = model(images) #model making the guess
-        loss = criterion(outputs, labels) 
-        loss.backward() # backward prop
-        optimizer.step() # update weights
-        running_loss += loss.item()
-    
-    scheduler.step()  # update lr once every 5 epochs
-    print(f"Epoch {epoch+1}, Loss = {running_loss:.4f}")
+epochs = 10
+
+if os.path.exists("mnist_fixed_point.pth"):
+    print("Loading saved model...")
+    model.load_state_dict(torch.load("mnist_fixed_point.pth"))
+    model.eval()
+
+else:
+    print("Training model...")
+
+    for epoch in range(epochs):
+        running_loss = 0
+        for images, labels in train_loader:
+            optimizer.zero_grad()  # clears out calcs
+            outputs = model(images) #model making the guess
+            loss = criterion(outputs, labels) 
+            loss.backward() # backward prop
+            optimizer.step() # update weights
+            running_loss += loss.item()
+        
+        scheduler.step()  # update lr once every 5 epochs
+        print(f"Epoch {epoch+1}, Loss = {running_loss / len(train_loader):.4f}")
+    torch.save(model.state_dict(), "mnist_fixed_point.pth")
 
 
 correct = 0
@@ -195,3 +205,44 @@ with torch.no_grad(): # dont calc gradients
         correct += (predicted == labels).sum().item()
 
 print("Accuracy =", 100 * correct / total, "%")
+
+
+w1 = model.fc1.weight.data.numpy()
+b1 = model.fc1.bias.data.numpy()
+
+
+w2 = model.fc2.weight.data.numpy()
+b2 = model.fc2.bias.data.numpy()
+
+w3 = model.fc3.weight.data.numpy()
+b3 = model.fc3.bias.data.numpy()
+
+print(w1.shape, b1.shape)
+print(w2.shape, b2.shape)
+print(w3.shape, b3.shape)
+
+scale = 256
+# q8.8 quantization 
+# in verilog sum +=  (a*B) 
+# final = sum >> 8
+
+def quantize(arr):
+    return np.clip(arr * scale, -32768, 32767).astype(np.int16)
+
+w1_q = quantize(w1)
+b1_q = quantize(b1)
+
+w2_q = quantize(w2)
+b2_q = quantize(b2)
+
+w3_q = quantize(w3)
+b3_q = quantize(b3)
+
+np.savetxt("w1.mem", w1_q.flatten() & 0xFFFF, fmt="%04x")
+np.savetxt("b1.mem", b1_q.flatten() & 0xFFFF, fmt="%04x")
+
+np.savetxt("w2.mem", w2_q.flatten() & 0xFFFF, fmt="%04x")
+np.savetxt("b2.mem", b2_q.flatten() & 0xFFFF, fmt="%04x")
+
+np.savetxt("w3.mem", w3_q.flatten() & 0xFFFF, fmt="%04x")
+np.savetxt("b3.mem", b3_q.flatten() & 0xFFFF, fmt="%04x")

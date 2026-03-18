@@ -1,0 +1,20 @@
+# model files
+*.pth
+*.pt
+
+# mem files
+*.mem
+
+# numpy / data
+*.npy
+
+# python cache
+__pycache__/
+*.pyc
+
+# logs
+*.log
+
+# optional folders
+weights/
+outputs/
